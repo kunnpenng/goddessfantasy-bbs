@@ -1,0 +1,30 @@
+[plugin]
+enabled = true
+config_version = "1.2.0"
+
+[site]
+base_url = "https://www.goddessfantasy.net/bbs"
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+cookie = ""
+timeout_seconds = 12.0
+
+[query]
+max_results = 5
+pages_per_board = 3
+search_recent_topics = 10
+render_first_match = true
+skip_sticky_topics = true
+
+[[query.boards]]
+name = "Unearthed Arcana"
+url = "https://www.goddessfantasy.net/bbs/index.php?board=1888.0"
+aliases = [
+    "UA",
+    "Unearthed Arcana",
+]
+
+[render]
+font_path = ""
+width = 1200
+max_chars = 2200
+timeout_seconds = 30.0

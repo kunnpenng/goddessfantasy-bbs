@@ -1,0 +1,46 @@
+{
+  "manifest_version": 2,
+  "version": "1.2.0",
+  "name": "纯美苹果园论坛查询",
+  "description": "从纯美苹果园论坛按可扩展板块代称搜索最近主题，并发送论坛原始首楼 HTML 截图。",
+  "author": {
+    "name": "MaiBot User",
+    "url": "https://www.goddessfantasy.net/bbs"
+  },
+  "license": "MIT",
+  "urls": {
+    "repository": "https://www.goddessfantasy.net/bbs",
+    "homepage": "https://www.goddessfantasy.net/bbs",
+    "documentation": "https://www.goddessfantasy.net/bbs",
+    "issues": "https://www.goddessfantasy.net/bbs"
+  },
+  "host_application": {
+    "min_version": "1.0.0",
+    "max_version": "1.99.99"
+  },
+  "sdk": {
+    "min_version": "2.5.4",
+    "max_version": "2.99.99"
+  },
+  "dependencies": [],
+  "capabilities": [
+    "send.text",
+    "send.image",
+    "send.hybrid"
+  ],
+  "i18n": {
+    "default_locale": "zh-CN",
+    "supported_locales": [
+      "zh-CN"
+    ]
+  },
+  "id": "local.goddessfantasy-bbs",
+  "plugin_type": "extension",
+  "display": {
+    "icon": {
+      "type": "lucide",
+      "value": "apple",
+      "background": "#4F8A4C"
+    }
+  }
+}
