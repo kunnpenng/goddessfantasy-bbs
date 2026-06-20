@@ -1,36 +1,60 @@
-# 纯美苹果园论坛查询插件
+# 纯美苹果园论坛查询
 
-从纯美苹果园论坛按配置板块搜索最近主题、获取帖子首楼 HTML 截图，并把结果发送到当前聊天流。
+MaiBot 第三方插件，用来在聊天中查询纯美苹果园论坛主题，并把帖子首楼渲染为图片发送到当前群聊或私聊。
 
 ## 功能
 
-- `/果园搜索 <板块代称> <关键词>`：搜索指定配置板块最近主题标题。多条命中时只发送帖子标题和 topic 编号；唯一命中时只发送首楼截图。
-- `/果园搜索 <topic编号>`：直接获取指定 topic 的帖子首楼截图。
-- `/果园添加 <板块URL或board_id> <代称1|代称2>`：新增用户侧搜索板块；如果板块已存在，则只追加代称。
-- `/果园删除 <板块URL或board_id|代称> [代称1|代称2]`：删除用户侧板块或指定代称。
-- `/果园帮助`：发送插件命令帮助和已配置板块代称。
-- `/果园板块 <板块URL或board_id> [数量]`：列出指定板块主题。
-- `goddessfantasy_search` Tool：供 MaiBot 在对话中主动调用。
+- 按板块代称搜索最近主题标题。
+- 用 topic 编号直接发送帖子首楼截图。
+- 在聊天中添加或删除自定义板块代称。
+- 列出指定板块的最近主题。
+- 按群聊或私聊单独关闭果园功能，避免在不需要的聊天里打扰其他机器人。
+- 提供 `goddessfantasy_search` Tool，MaiBot 可在对话中主动调用。
+
+## 安装
+
+1. 将本仓库放到 MaiBot 的插件目录：
+
+```text
+plugins/goddessfantasy-bbs/
+```
+
+2. 确认目录内至少包含：
+
+```text
+plugin.py
+_manifest.json
+config.toml
+README.md
+```
+
+3. 重启 MaiBot。
+4. 在 MaiBot WebUI 的插件管理中确认 `纯美苹果园论坛查询` 已加载并启用。
 
 ## 配置
 
-配置文件为 `config.toml`：
+主要配置在 `config.toml`：
+
+```toml
+[plugin]
+enabled = true
+
+[site]
+base_url = "https://www.goddessfantasy.net/bbs"
+user_agent = "Mozilla/5.0 ..."
+cookie = ""
+timeout_seconds = 12.0
+```
+
+常用项：
 
 - `plugin.enabled`：是否启用插件。
-- `site.base_url`：纯美苹果园论坛基础地址。
-- `site.user_agent`：HTTP 请求使用的 User-Agent。
-- `site.cookie`：访问需要登录的板块时使用的 Cookie 请求头；留空时只能访问公开页面。
-- `site.timeout_seconds`：请求超时时间。
-- `query.max_results`：板块列表等旧接口最多返回条数。
-- `query.pages_per_board`：列出板块主题时最多扫描页数。
+- `site.cookie`：访问需要登录的板块时使用的 Cookie。留空时只能访问公开页面。
 - `query.search_recent_topics`：`/果园搜索` 扫描的最近主题数量。
-- `query.render_first_match`：保留配置项；当前搜索仅在唯一命中时发送首楼截图。
-- `query.skip_sticky_topics`：搜索和列出板块主题时是否跳过置顶帖；直接 `/果园搜索 <topic编号>` 不受影响。
-- `query.boards`：可通过代称搜索的板块列表，每个板块包含 `name`、`url` 和 `aliases`。
-- `render.font_path`：保留配置项；当前使用论坛原始 HTML 截图，不再使用文字卡片渲染。
-- `render.width`：首楼 HTML 截图的浏览器视口宽度。
-- `render.max_chars`：保留配置项；当前使用论坛原始 HTML 截图，不截断正文。
-- `render.timeout_seconds`：首楼 HTML 截图超时时间。
+- `query.skip_sticky_topics`：搜索和列板块主题时是否跳过置顶帖。
+- `query.boards`：内置板块代称配置。
+- `render.width`：首楼 HTML 截图宽度。
+- `render.timeout_seconds`：渲染超时时间。
 
 板块配置示例：
 
@@ -41,31 +65,96 @@ url = "https://www.goddessfantasy.net/bbs/index.php?board=1888.0"
 aliases = ["UA", "Unearthed Arcana"]
 ```
 
-用户通过 `/果园添加` 新增的板块会保存到插件目录的 `user_boards.json`，不会改写 `config.toml`。配置文件内置板块不能通过聊天命令删除，但可以通过 `/果园添加` 追加用户侧代称。
+## 配置登录 Cookie
 
-纯美苹果园的部分板块禁止访客访问。若访问 `https://www.goddessfantasy.net/bbs/index.php?board=1888.0` 这类页面时返回登录提示，需要先在浏览器登录果园，再把该站点请求中的 Cookie 值填入 `site.cookie`。
+纯美苹果园的部分板块需要登录才能访问。如果查询时提示需要登录：
 
-## 启用方式
+1. 在浏览器登录纯美苹果园。
+2. 打开浏览器开发者工具，复制访问 `www.goddessfantasy.net` 时的请求 Cookie。
+3. 将 Cookie 填入 `config.toml` 的 `site.cookie`。
+4. 重启 MaiBot 或重新加载插件。
 
-1. 确认目录位于 `plugins/goddessfantasy-bbs/`。
-2. 启动或重启 MaiBot。
-3. 在 WebUI 插件管理中确认 `纯美苹果园论坛查询` 已加载并启用。
+不要把包含 Cookie 的 `config.toml` 提交到公开仓库。建议只在本地保存 Cookie。
 
-## 测试方式
+## 命令
 
-在群聊中发送：
+```text
+/果园搜索 <板块代称> <关键词>
+/果园搜索 <topic编号>
+/果园板块 <板块URL或board_id> [数量]
+/果园添加 <板块URL或board_id> <代称1|代称2>
+/果园删除 <板块URL或board_id|代称> [代称1|代称2]
+/果园帮助
+```
+
+示例：
 
 ```text
 /果园搜索 UA 邪恶子职
 /果园搜索 167693
-/果园添加 2318 鸦阁书|鸦阁|鸦阁魔域：魔障深藏
-/果园添加 https://www.goddessfantasy.net/bbs/index.php?board=2318.0 鸦阁魔域：魔障深藏
-/果园删除 鸦阁
-/果园删除 2318 鸦阁书|鸦阁
-/果园帮助
 /果园板块 1888 5
+/果园添加 2318 鸦阁书|鸦阁|鸦阁魔域：魔障深藏
+/果园删除 鸦阁
 ```
 
-如果 `/果园搜索 <板块代称> <关键词>` 返回多个帖子，可以再用 `/果园搜索 <topic编号>` 直接获取指定帖子的首楼截图。
+搜索结果规则：
 
-如果站点要求登录、出现验证码、页面结构变化或图片过大，插件会返回明确的中文错误信息。
+- 找到唯一帖子时，插件会直接发送该帖首楼截图。
+- 找到多个帖子时，插件会发送标题和 topic 编号。
+- 可以再用 `/果园搜索 <topic编号>` 获取指定帖子的首楼截图。
+
+## 按聊天关闭或开启
+
+关闭和开启命令必须明确 `@机器人`，防止误伤其他机器人：
+
+```text
+@机器人 /关闭果园
+@机器人 /果园关闭
+@机器人 /开启果园
+@机器人 /果园开启
+```
+
+开关只影响当前聊天流：
+
+- 在某个群聊关闭，只会静默这个群聊。
+- 在私聊关闭，只会静默这个私聊。
+- 其他群聊和私聊不受影响。
+
+关闭后，当前聊天里除了 `@机器人 /开启果园` 和 `/果园帮助`，其他果园聊天指令都不会发送回复。Tool 调用会返回当前聊天已关闭的状态。
+
+开关状态保存在插件目录的 `runtime_state.json`，不会改写 `config.toml`。
+
+## 用户侧板块
+
+通过 `/果园添加` 添加的板块会保存到 `user_boards.json`。
+
+`config.toml` 内置板块不能通过聊天命令删除，但可以通过 `/果园添加` 为已有板块追加用户侧代称。
+
+## 测试
+
+安装后在群聊或私聊发送：
+
+```text
+/果园帮助
+/果园搜索 UA 邪恶子职
+/果园板块 1888 5
+@机器人 /关闭果园
+/果园搜索 UA 邪恶子职
+/果园帮助
+@机器人 /开启果园
+/果园搜索 UA 邪恶子职
+```
+
+预期结果：
+
+- `/果园帮助` 会显示当前聊天的果园状态。
+- 关闭后，普通果园查询指令静默。
+- 开启后，当前聊天恢复果园查询。
+- 在其他群聊或私聊中，开关状态互不影响。
+
+## 排障
+
+- 提示需要登录：检查 `site.cookie` 是否有效，或重新登录论坛后更新 Cookie。
+- 没有搜索到帖子：确认板块代称正确，并调整 `query.search_recent_topics`。
+- 截图失败：确认运行环境可用浏览器或 Playwright，必要时增大 `render.timeout_seconds`。
+- 论坛页面结构变化：插件可能无法解析主题列表或首楼内容，需要更新插件。

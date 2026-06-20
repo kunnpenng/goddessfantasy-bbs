@@ -263,10 +263,12 @@ class GoddessFantasyPlugin(MaiBotPlugin):
     """从纯美苹果园论坛获取信息并发送到聊天流。"""
 
     config_model = GoddessFantasyConfig
+    _disabled_stream_ids: set[str]
 
     async def on_load(self) -> None:
         """插件加载完成。"""
 
+        self._disabled_stream_ids = self._load_disabled_stream_ids()
         self.ctx.logger.info("纯美苹果园论坛查询插件已加载")
 
     async def on_unload(self) -> None:
@@ -281,6 +283,37 @@ class GoddessFantasyPlugin(MaiBotPlugin):
         self.ctx.logger.info("纯美苹果园论坛查询插件配置已更新：scope=%s version=%s", scope, version)
 
     @Command(
+        "goddessfantasy_disable_command",
+        description="关闭纯美苹果园论坛查询相关指令，需要显式 @ 机器人",
+        pattern=r"^\s*@\S+\s+/(?:关闭果园|果园关闭)\s*$",
+    )
+    async def handle_disable_command(self, stream_id: str = "", **kwargs: Any) -> tuple[bool, str, bool]:
+        """处理 @机器人 /关闭果园 命令。"""
+
+        if self._is_stream_disabled(stream_id):
+            return self._ignore_disabled_command()
+        self._set_stream_enabled(stream_id, False)
+        message = f"已关闭当前{self._conversation_label(kwargs)}的果园相关指令。需要恢复时请 @我 发送 /开启果园 或 /果园开启。"
+        await self.ctx.send.text(message, stream_id)
+        return True, message, True
+
+    @Command(
+        "goddessfantasy_enable_command",
+        description="开启纯美苹果园论坛查询相关指令，需要显式 @ 机器人",
+        pattern=r"^\s*@\S+\s+/(?:开启果园|果园开启)\s*$",
+    )
+    async def handle_enable_command(self, stream_id: str = "", **kwargs: Any) -> tuple[bool, str, bool]:
+        """处理 @机器人 /开启果园 命令。"""
+
+        self._set_stream_enabled(stream_id, True)
+        if self.config.plugin.enabled:
+            message = f"已开启当前{self._conversation_label(kwargs)}的果园相关指令。"
+        else:
+            message = "已恢复当前聊天的果园运行期开关，但插件配置 plugin.enabled=false，仍需在配置中启用插件。"
+        await self.ctx.send.text(message, stream_id)
+        return True, message, True
+
+    @Command(
         "goddessfantasy_search_command",
         description="按配置板块代称搜索纯美苹果园论坛最近主题",
         pattern=r"^/果园搜索\s+(?P<board_alias>\S+)\s+(?P<query>.+?)$",
@@ -292,6 +325,9 @@ class GoddessFantasyPlugin(MaiBotPlugin):
         query = self._get_matched_value(kwargs, "query").strip()
         if not board_alias or not query:
             return await self._send_usage(stream_id, "用法：/果园搜索 <板块代称> <关键词>")
+
+        if not self._commands_available(stream_id):
+            return self._ignore_disabled_command()
 
         return await self._send_search_results(stream_id, board_alias, query)
 
@@ -307,6 +343,9 @@ class GoddessFantasyPlugin(MaiBotPlugin):
         if not thread:
             return await self._send_usage(stream_id, "用法：/果园搜索 <topic编号>")
 
+        if not self._commands_available(stream_id):
+            return self._ignore_disabled_command()
+
         return await self._send_thread_render_image(stream_id, thread)
 
     @Command(
@@ -318,7 +357,7 @@ class GoddessFantasyPlugin(MaiBotPlugin):
         """处理 /果园帮助 命令。"""
 
         del kwargs
-        return await self._send_usage(stream_id, self._build_help_text())
+        return await self._send_usage(stream_id, self._build_help_text(stream_id))
 
     @Command(
         "goddessfantasy_add_board_command",
@@ -332,6 +371,9 @@ class GoddessFantasyPlugin(MaiBotPlugin):
         aliases = self._get_matched_value(kwargs, "aliases").strip()
         if not board or not aliases:
             return await self._send_usage(stream_id, "用法：/果园添加 <板块URL或board_id> <代称1|代称2>")
+
+        if not self._commands_available(stream_id):
+            return self._ignore_disabled_command()
 
         try:
             message = self._add_user_board_aliases(board, aliases)
@@ -355,6 +397,9 @@ class GoddessFantasyPlugin(MaiBotPlugin):
         if not target:
             return await self._send_usage(stream_id, "用法：/果园删除 <板块URL或board_id|代称> [代称1|代称2]")
 
+        if not self._commands_available(stream_id):
+            return self._ignore_disabled_command()
+
         try:
             message = self._delete_user_board(target, aliases)
             await self.ctx.send.text(message, stream_id)
@@ -376,6 +421,9 @@ class GoddessFantasyPlugin(MaiBotPlugin):
         limit = self._parse_optional_int(self._get_matched_value(kwargs, "limit"), self.config.query.max_results)
         if not board:
             return await self._send_usage(stream_id, "用法：/果园板块 <板块URL或board_id> [数量]")
+
+        if not self._commands_available(stream_id):
+            return self._ignore_disabled_command()
 
         return await self._send_board_topics(stream_id, board, limit)
 
@@ -406,6 +454,9 @@ class GoddessFantasyPlugin(MaiBotPlugin):
         """供 LLM 调用的论坛搜索工具。"""
 
         del kwargs
+        if not self._commands_available(stream_id):
+            message = self._disabled_message(stream_id)
+            return {"success": False, "message": message}
         success, message, _ = await self._send_search_results(stream_id, board_alias, query, render_first_match=include_images)
         return {"success": success, "message": message}
 
@@ -415,6 +466,55 @@ class GoddessFantasyPlugin(MaiBotPlugin):
             await self.ctx.send.text(text, stream_id)
         return False, text, True
 
+    def _commands_available(self, stream_id: str = "") -> bool:
+        return self.config.plugin.enabled and not self._is_stream_disabled(stream_id)
+
+    def _disabled_message(self, stream_id: str = "") -> str:
+        if not self.config.plugin.enabled:
+            return "纯美苹果园论坛查询插件未启用"
+        if self._is_stream_disabled(stream_id):
+            return "当前聊天的果园相关指令已关闭。需要恢复时请 @我 发送 /开启果园 或 /果园开启。"
+        return "果园相关指令不可用。"
+
+    def _ignore_disabled_command(self) -> tuple[bool, str, bool]:
+        return False, "果园相关指令已关闭", True
+
+    def _load_disabled_stream_ids(self) -> set[str]:
+        path = self._runtime_state_path()
+        if not path.exists():
+            return set()
+        raw_data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw_data, dict):
+            raise GoddessFantasyError("运行期开关数据格式错误：根节点必须是对象")
+        raw_stream_ids = raw_data.get("disabled_stream_ids", [])
+        if not isinstance(raw_stream_ids, list):
+            raise GoddessFantasyError("运行期开关数据格式错误：disabled_stream_ids 必须是列表")
+        return {str(stream_id).strip() for stream_id in raw_stream_ids if str(stream_id).strip()}
+
+    def _set_stream_enabled(self, stream_id: str, enabled: bool) -> None:
+        normalized_stream_id = stream_id.strip()
+        if not normalized_stream_id:
+            raise GoddessFantasyError("无法识别当前聊天流，不能修改果园开关")
+        if enabled:
+            self._disabled_stream_ids.discard(normalized_stream_id)
+        else:
+            self._disabled_stream_ids.add(normalized_stream_id)
+        self._runtime_state_path().write_text(
+            json.dumps({"disabled_stream_ids": sorted(self._disabled_stream_ids)}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def _is_stream_disabled(self, stream_id: str) -> bool:
+        return stream_id.strip() in self._disabled_stream_ids
+
+    @staticmethod
+    def _conversation_label(kwargs: Dict[str, Any]) -> str:
+        if str(kwargs.get("group_id") or "").strip():
+            return "群聊"
+        if str(kwargs.get("user_id") or "").strip():
+            return "私聊"
+        return "聊天"
+
     async def _send_search_results(
         self,
         stream_id: str,
@@ -423,8 +523,8 @@ class GoddessFantasyPlugin(MaiBotPlugin):
         *,
         render_first_match: bool | None = None,
     ) -> tuple[bool, str, bool]:
-        if not self.config.plugin.enabled:
-            return await self._send_usage(stream_id, "纯美苹果园论坛查询插件未启用")
+        if not self._commands_available(stream_id):
+            return await self._send_usage(stream_id, self._disabled_message(stream_id))
 
         try:
             board = self._resolve_board_alias(board_alias)
@@ -450,8 +550,8 @@ class GoddessFantasyPlugin(MaiBotPlugin):
             return False, message, True
 
     async def _send_board_topics(self, stream_id: str, board: str, limit: int) -> tuple[bool, str, bool]:
-        if not self.config.plugin.enabled:
-            return await self._send_usage(stream_id, "纯美苹果园论坛查询插件未启用")
+        if not self._commands_available(stream_id):
+            return await self._send_usage(stream_id, self._disabled_message(stream_id))
 
         try:
             results = await self._fetch_board_topics(board, limit)
@@ -635,13 +735,14 @@ class GoddessFantasyPlugin(MaiBotPlugin):
             headers["Cookie"] = cookie
         return headers
 
-    def _build_help_text(self) -> str:
+    def _build_help_text(self, stream_id: str = "") -> str:
         board_lines = []
         for board in self._get_all_boards():
             aliases = " / ".join(alias for alias in board.aliases if alias.strip())
             board_lines.append(f"- {board.name}: {aliases or '未配置代称'}")
         configured_boards = "\n".join(board_lines) if board_lines else "- 未配置"
         sticky_text = "跳过" if self.config.query.skip_sticky_topics else "包含"
+        status_text = "开启" if self._commands_available(stream_id) else "关闭"
         return (
             "纯美苹果园论坛查询插件帮助\n"
             "\n"
@@ -651,8 +752,11 @@ class GoddessFantasyPlugin(MaiBotPlugin):
             "/果园添加 <板块URL或board_id> <代称1|代称2>：新增板块或给已有板块追加代称。\n"
             "/果园删除 <板块URL或board_id|代称> [代称1|代称2]：删除用户侧板块或代称。\n"
             "/果园板块 <板块URL或board_id> [数量]：列出指定板块主题。\n"
+            "@我 /关闭果园：关闭果园搜索、查帖、板块管理和 Tool 调用。\n"
+            "@我 /开启果园：恢复果园相关指令。\n"
             "/果园帮助：发送本帮助。\n"
             "\n"
+            f"当前果园相关指令状态：{status_text}。\n"
             f"当前搜索扫描最近 {self.config.query.search_recent_topics} 个非置顶主题，置顶帖处理：{sticky_text}。\n"
             "已配置板块代称：\n"
             f"{configured_boards}"
@@ -785,6 +889,10 @@ class GoddessFantasyPlugin(MaiBotPlugin):
     @staticmethod
     def _user_boards_path() -> Path:
         return Path(__file__).resolve().parent / "user_boards.json"
+
+    @staticmethod
+    def _runtime_state_path() -> Path:
+        return Path(__file__).resolve().parent / "runtime_state.json"
 
     def _resolve_board_identity(self, target: str) -> str:
         identity = self._try_board_identity(target)

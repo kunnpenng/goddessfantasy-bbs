@@ -4,4 +4,6 @@ __pycache__/
 .ruff_cache/
 .render_cache/
 user_boards.json
+runtime_state.json
+local_secrets.toml
 *.log
